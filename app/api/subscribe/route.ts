@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: 'Invalid email address' }, { status: 400 });
     }
-    addSubscriber(email.toLowerCase().trim());
+    await addSubscriber(email.toLowerCase().trim());
     return NextResponse.json({ success: true });
   } catch (err: any) {
     if (err?.message?.includes('UNIQUE constraint failed')) {

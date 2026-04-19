@@ -4,7 +4,7 @@ import { getArticleById, updateArticle, deleteArticle, generateSlug, getAuthorBy
 type Params = { params: { id: string } };
 
 export async function GET(_req: NextRequest, { params }: Params) {
-  const article = getArticleById(Number(params.id));
+  const article = await getArticleById(Number(params.id));
   if (!article) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   return NextResponse.json(article);
 }
@@ -20,7 +20,7 @@ export async function PUT(req: NextRequest, { params }: Params) {
     if (author_id !== undefined) {
       updates.author_id = author_id ? Number(author_id) : null;
       if (author_id) {
-        const author = getAuthorById(Number(author_id));
+        const author = await getAuthorById(Number(author_id));
         if (author) updates.author = author.name;
       }
     }
@@ -30,10 +30,10 @@ export async function PUT(req: NextRequest, { params }: Params) {
     if (published !== undefined) updates.published = published ? 1 : 0;
     if (publish_at !== undefined) updates.publish_at = publish_at || null;
 
-    const article = updateArticle(Number(params.id), updates);
+    const article = await updateArticle(Number(params.id), updates);
     if (!article) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    if (tags !== undefined) setArticleTags(Number(params.id), tags);
+    if (tags !== undefined) await setArticleTags(Number(params.id), tags);
 
     return NextResponse.json(article);
   } catch {
@@ -43,8 +43,8 @@ export async function PUT(req: NextRequest, { params }: Params) {
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try {
-    if (!getArticleById(Number(params.id))) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    deleteArticle(Number(params.id));
+    if (!(await getArticleById(Number(params.id)))) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    await deleteArticle(Number(params.id));
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: 'Failed to delete article' }, { status: 500 });

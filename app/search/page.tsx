@@ -7,9 +7,9 @@ import { searchArticles } from '@/lib/db';
 
 export const metadata: Metadata = { title: 'Search | Horizon Analysis' };
 
-export default function SearchPage({ searchParams }: { searchParams: { q?: string } }) {
+export default async function SearchPage({ searchParams }: { searchParams: { q?: string } }) {
   const query = searchParams.q?.trim() ?? '';
-  const results = query.length > 1 ? searchArticles(query) : [];
+  const results = query.length > 1 ? await searchArticles(query) : [];
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

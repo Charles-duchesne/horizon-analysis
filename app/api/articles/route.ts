@@ -3,7 +3,7 @@ import { getAllArticles, createArticle, generateSlug, getAuthorById, setArticleT
 
 export async function GET() {
   try {
-    return NextResponse.json(getAllArticles());
+    return NextResponse.json(await getAllArticles());
   } catch {
     return NextResponse.json({ error: 'Failed to fetch articles' }, { status: 500 });
   }
@@ -20,11 +20,11 @@ export async function POST(req: NextRequest) {
 
     let authorName = 'Unknown';
     if (author_id) {
-      const author = getAuthorById(Number(author_id));
+      const author = await getAuthorById(Number(author_id));
       if (author) authorName = author.name;
     }
 
-    const article = createArticle({
+    const article = await createArticle({
       title,
       slug: generateSlug(title),
       section,
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
       publish_at: publish_at || null,
     });
 
-    if (tags?.length) setArticleTags(article.id, tags);
+    if (tags?.length) await setArticleTags(article.id, tags);
 
     return NextResponse.json(article, { status: 201 });
   } catch (err: any) {

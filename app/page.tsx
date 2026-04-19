@@ -40,10 +40,11 @@ function HeroArticle({ article }: { article: Article }) {
 
 const sections = ['economy', 'politics', 'equities', 'others'] as const;
 
-export default function HomePage() {
-  const all = getPublishedArticles();
+export default async function HomePage() {
+  const all = await getPublishedArticles();
   const featured = all[0];
   const recent = all.slice(1, 7);
+  const sectionData = sections.map(s => ({ section: s, articles: all.filter(a => a.section === s).slice(0, 3) }));
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -68,8 +69,7 @@ export default function HomePage() {
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
-          {sections.map(section => {
-            const sectionArticles = getPublishedArticles(section).slice(0, 3);
+          {sectionData.map(({ section, articles: sectionArticles }) => {
             if (sectionArticles.length === 0) return null;
             return (
               <section key={section}>

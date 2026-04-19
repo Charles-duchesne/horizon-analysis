@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   description: 'Latest economy analysis and insights from Horizon Analysis.',
 };
 
-export default function EconomyPage() {
-  const articles = getPublishedArticles('economy');
+export default async function EconomyPage() {
+  const articles = await getPublishedArticles('economy');
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header />

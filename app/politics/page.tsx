@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   description: 'Latest political analysis and insights from Horizon Analysis.',
 };
 
-export default function PoliticsPage() {
-  const articles = getPublishedArticles('politics');
+export default async function PoliticsPage() {
+  const articles = await getPublishedArticles('politics');
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header />

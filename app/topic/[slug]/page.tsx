@@ -7,16 +7,16 @@ import ArticleCard from '@/components/ArticleCard';
 import { getTagBySlug, getArticlesByTag } from '@/lib/db';
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
-  const tag = getTagBySlug(params.slug);
+  const tag = await getTagBySlug(params.slug);
   if (!tag) return { title: 'Topic | Horizon Analysis' };
   return { title: `#${tag.name} | Horizon Analysis`, description: `Articles tagged with ${tag.name}` };
 }
 
-export default function TopicPage({ params }: { params: { slug: string } }) {
-  const tag = getTagBySlug(params.slug);
+export default async function TopicPage({ params }: { params: { slug: string } }) {
+  const tag = await getTagBySlug(params.slug);
   if (!tag) notFound();
 
-  const articles = getArticlesByTag(params.slug);
+  const articles = await getArticlesByTag(params.slug);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

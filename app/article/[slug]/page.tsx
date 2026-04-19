@@ -16,7 +16,7 @@ import { readingTime } from '@/lib/readingTime';
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://horizonanalysis.com';
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
-  const article = getArticleBySlug(params.slug);
+  const article = await getArticleBySlug(params.slug);
   if (!article) return { title: 'Not Found | Horizon Analysis' };
   const url = `${BASE_URL}/article/${article.slug}`;
   return {
@@ -43,11 +43,11 @@ function formatDate(dt: string) {
   return new Date(dt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
-export default function ArticlePage({ params }: { params: { slug: string } }) {
-  const article = getArticleBySlug(params.slug);
+export default async function ArticlePage({ params }: { params: { slug: string } }) {
+  const article = await getArticleBySlug(params.slug);
   if (!article) notFound();
 
-  const related = getRelatedArticles(article.id, article.section);
+  const related = await getRelatedArticles(article.id, article.section);
   const mins = readingTime(article.content);
 
   return (
@@ -55,7 +55,6 @@ export default function ArticlePage({ params }: { params: { slug: string } }) {
       <ReadingProgress section={article.section} />
       <Header />
       <main className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        {/* Article header */}
         <div className="mb-8">
           <SectionBadge section={article.section} />
           <h1 className="mt-3 text-3xl sm:text-4xl font-bold text-gray-900 dark:text-gray-100 leading-tight">
@@ -84,7 +83,6 @@ export default function ArticlePage({ params }: { params: { slug: string } }) {
             <SocialShare title={article.title} />
           </div>
 
-          {/* Tags */}
           {article.tags && article.tags.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-4">
               {article.tags.map(tag => (
@@ -97,22 +95,18 @@ export default function ArticlePage({ params }: { params: { slug: string } }) {
           )}
         </div>
 
-        {/* Cover image */}
         {article.cover_image_url && (
           <div className="mb-8 rounded-xl overflow-hidden">
             <img src={article.cover_image_url} alt={article.title} className="w-full h-64 sm:h-96 object-cover" />
           </div>
         )}
 
-        {/* Content */}
         <article className="dark:prose-invert">
           <MarkdownRenderer content={article.content} />
         </article>
 
-        {/* Related articles */}
         <RelatedArticles articles={related} section={article.section} />
 
-        {/* Newsletter */}
         <div className="mt-12">
           <NewsletterSignup />
         </div>

@@ -8,7 +8,7 @@ function escape(str: string) {
 
 export async function GET(req: Request) {
   const baseUrl = new URL(req.url).origin;
-  const articles = getPublishedArticles();
+  const articles = await getPublishedArticles();
 
   const items = articles.map(a => `
     <item>

@@ -11,10 +11,12 @@ export async function generateMetadata({ params }: { params: { name: string } })
   return { title: `${name} | Horizon Analysis` };
 }
 
-export default function AuthorPage({ params }: { params: { name: string } }) {
+export default async function AuthorPage({ params }: { params: { name: string } }) {
   const name = decodeURIComponent(params.name);
-  const author = getAuthorByName(name);
-  const articles = getArticlesByAuthorName(name);
+  const [author, articles] = await Promise.all([
+    getAuthorByName(name),
+    getArticlesByAuthorName(name),
+  ]);
 
   if (!author && articles.length === 0) notFound();
 

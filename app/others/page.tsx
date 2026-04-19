@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   description: 'Other insights and analysis from Horizon Analysis.',
 };
 
-export default function OthersPage() {
-  const articles = getPublishedArticles('others');
+export default async function OthersPage() {
+  const articles = await getPublishedArticles('others');
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header />

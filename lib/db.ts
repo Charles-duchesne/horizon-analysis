@@ -1,88 +1,85 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+import { createClient, Client } from '@libsql/client';
 
-const DB_PATH = path.join(process.cwd(), 'horizon.db');
+// ─── Client ───────────────────────────────────────────────────────────────────
 
-let db: Database.Database;
+let _client: Client | null = null;
+let initPromise: Promise<void> | null = null;
 
-function getDb(): Database.Database {
-  if (!db) {
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-    initSchema(db);
+function getClient(): Client {
+  if (!_client) {
+    _client = createClient({
+      url: process.env.TURSO_DATABASE_URL!,
+      authToken: process.env.TURSO_AUTH_TOKEN,
+    });
   }
-  return db;
+  return _client;
 }
 
-function initSchema(database: Database.Database) {
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS authors (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE NOT NULL,
-      bio TEXT,
-      avatar_url TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
+async function initSchema(): Promise<void> {
+  const client = getClient();
 
-    CREATE TABLE IF NOT EXISTS subscribers (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      email TEXT UNIQUE NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
+  await client.batch([
+    { sql: `CREATE TABLE IF NOT EXISTS authors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        bio TEXT,
+        avatar_url TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )` },
+    { sql: `CREATE TABLE IF NOT EXISTS subscribers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )` },
+    { sql: `CREATE TABLE IF NOT EXISTS tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE NOT NULL,
+        slug TEXT UNIQUE NOT NULL
+      )` },
+    { sql: `CREATE TABLE IF NOT EXISTS articles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        slug TEXT UNIQUE NOT NULL,
+        section TEXT NOT NULL,
+        author TEXT NOT NULL,
+        author_id INTEGER REFERENCES authors(id),
+        summary TEXT,
+        content TEXT NOT NULL,
+        cover_image_url TEXT,
+        published INTEGER DEFAULT 0,
+        publish_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )` },
+    { sql: `CREATE TABLE IF NOT EXISTS article_tags (
+        article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+        tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+        PRIMARY KEY (article_id, tag_id)
+      )` },
+  ], 'write');
 
-    CREATE TABLE IF NOT EXISTS tags (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT UNIQUE NOT NULL,
-      slug TEXT UNIQUE NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS articles (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      slug TEXT UNIQUE NOT NULL,
-      section TEXT NOT NULL,
-      author TEXT NOT NULL,
-      author_id INTEGER REFERENCES authors(id),
-      summary TEXT,
-      content TEXT NOT NULL,
-      cover_image_url TEXT,
-      published INTEGER DEFAULT 0,
-      publish_at DATETIME,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS article_tags (
-      article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
-      tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
-      PRIMARY KEY (article_id, tag_id)
-    );
-  `);
-
-  // Migrate existing articles table columns
   for (const sql of [
     `ALTER TABLE articles ADD COLUMN author_id INTEGER REFERENCES authors(id)`,
     `ALTER TABLE articles ADD COLUMN publish_at DATETIME`,
   ]) {
-    try { database.exec(sql); } catch {}
+    try { await client.execute(sql); } catch {}
   }
 
-  // Seed default authors
-  const count = (database.prepare('SELECT COUNT(*) as c FROM authors').get() as { c: number }).c;
-  if (count === 0) {
-    database.prepare('INSERT INTO authors (name, bio) VALUES (?, ?)').run(
-      'Editorial Team',
-      'The Horizon Analysis editorial team covers global markets, economic trends, and political developments.'
-    );
-    database.prepare('INSERT INTO authors (name, bio) VALUES (?, ?)').run(
-      'Market Desk',
-      'Our market desk provides daily analysis of equities, commodities, and financial instruments.'
-    );
+  const r = await client.execute('SELECT COUNT(*) as c FROM authors');
+  if (Number(r.rows[0].c) === 0) {
+    await client.batch([
+      { sql: 'INSERT INTO authors (name, bio) VALUES (?, ?)', args: ['Editorial Team', 'The Horizon Analysis editorial team covers global markets, economic trends, and political developments.'] },
+      { sql: 'INSERT INTO authors (name, bio) VALUES (?, ?)', args: ['Market Desk', 'Our market desk provides daily analysis of equities, commodities, and financial instruments.'] },
+    ], 'write');
   }
 }
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+async function ensureInit(): Promise<void> {
+  if (!initPromise) initPromise = initSchema();
+  return initPromise;
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export type Author = {
   id: number;
@@ -125,170 +122,217 @@ const ARTICLE_SELECT = `
   LEFT JOIN authors au ON a.author_id = au.id
 `;
 
-function mapRow(row: any): Article {
-  return { ...row };
-}
-
-function autoPublish() {
-  getDb().prepare(`
+async function autoPublish(): Promise<void> {
+  await getClient().execute(`
     UPDATE articles SET published = 1, publish_at = NULL
     WHERE publish_at IS NOT NULL AND publish_at <= datetime('now') AND published = 0
-  `).run();
+  `);
 }
 
 // ─── Articles ─────────────────────────────────────────────────────────────────
 
-export function getAllArticles(): Article[] {
-  autoPublish();
-  return (getDb().prepare(`${ARTICLE_SELECT} ORDER BY a.created_at DESC`).all() as any[]).map(mapRow);
+export async function getAllArticles(): Promise<Article[]> {
+  await ensureInit();
+  await autoPublish();
+  const r = await getClient().execute(`${ARTICLE_SELECT} ORDER BY a.created_at DESC`);
+  return r.rows as unknown as Article[];
 }
 
-export function getPublishedArticles(section?: string): Article[] {
-  autoPublish();
-  if (section) {
-    return (getDb().prepare(`${ARTICLE_SELECT} WHERE a.published = 1 AND a.section = ? ORDER BY a.created_at DESC`).all(section) as any[]).map(mapRow);
-  }
-  return (getDb().prepare(`${ARTICLE_SELECT} WHERE a.published = 1 ORDER BY a.created_at DESC`).all() as any[]).map(mapRow);
+export async function getPublishedArticles(section?: string): Promise<Article[]> {
+  await ensureInit();
+  await autoPublish();
+  const r = section
+    ? await getClient().execute({ sql: `${ARTICLE_SELECT} WHERE a.published = 1 AND a.section = ? ORDER BY a.created_at DESC`, args: [section] })
+    : await getClient().execute(`${ARTICLE_SELECT} WHERE a.published = 1 ORDER BY a.created_at DESC`);
+  return r.rows as unknown as Article[];
 }
 
-export function getArticleBySlug(slug: string): Article | undefined {
-  autoPublish();
-  const row = getDb().prepare(`${ARTICLE_SELECT} WHERE a.slug = ? AND a.published = 1`).get(slug) as any;
-  if (!row) return undefined;
-  const article = mapRow(row);
-  article.tags = getArticleTags(article.id);
+export async function getArticleBySlug(slug: string): Promise<Article | undefined> {
+  await ensureInit();
+  await autoPublish();
+  const r = await getClient().execute({ sql: `${ARTICLE_SELECT} WHERE a.slug = ? AND a.published = 1`, args: [slug] });
+  if (!r.rows[0]) return undefined;
+  const article = r.rows[0] as unknown as Article;
+  article.tags = await getArticleTags(article.id);
   return article;
 }
 
-export function getArticleById(id: number): Article | undefined {
-  const row = getDb().prepare(`${ARTICLE_SELECT} WHERE a.id = ?`).get(id) as any;
-  if (!row) return undefined;
-  const article = mapRow(row);
-  article.tags = getArticleTags(article.id);
+export async function getArticleById(id: number): Promise<Article | undefined> {
+  await ensureInit();
+  const r = await getClient().execute({ sql: `${ARTICLE_SELECT} WHERE a.id = ?`, args: [id] });
+  if (!r.rows[0]) return undefined;
+  const article = r.rows[0] as unknown as Article;
+  article.tags = await getArticleTags(article.id);
   return article;
 }
 
-export function getRelatedArticles(articleId: number, section: string, limit = 3): Article[] {
-  return (getDb()
-    .prepare(`${ARTICLE_SELECT} WHERE a.published = 1 AND a.section = ? AND a.id != ? ORDER BY a.created_at DESC LIMIT ?`)
-    .all(section, articleId, limit) as any[]).map(mapRow);
+export async function getRelatedArticles(articleId: number, section: string, limit = 3): Promise<Article[]> {
+  await ensureInit();
+  const r = await getClient().execute({
+    sql: `${ARTICLE_SELECT} WHERE a.published = 1 AND a.section = ? AND a.id != ? ORDER BY a.created_at DESC LIMIT ?`,
+    args: [section, articleId, limit],
+  });
+  return r.rows as unknown as Article[];
 }
 
-export function searchArticles(query: string): Article[] {
-  autoPublish();
+export async function searchArticles(query: string): Promise<Article[]> {
+  await ensureInit();
+  await autoPublish();
   const like = `%${query}%`;
-  return (getDb()
-    .prepare(`${ARTICLE_SELECT} WHERE a.published = 1 AND (a.title LIKE ? OR a.summary LIKE ? OR a.content LIKE ?) ORDER BY a.created_at DESC`)
-    .all(like, like, like) as any[]).map(mapRow);
+  const r = await getClient().execute({
+    sql: `${ARTICLE_SELECT} WHERE a.published = 1 AND (a.title LIKE ? OR a.summary LIKE ? OR a.content LIKE ?) ORDER BY a.created_at DESC`,
+    args: [like, like, like],
+  });
+  return r.rows as unknown as Article[];
 }
 
-export function getArticlesByTag(tagSlug: string): Article[] {
-  autoPublish();
-  return (getDb().prepare(`
-    ${ARTICLE_SELECT}
-    INNER JOIN article_tags at2 ON a.id = at2.article_id
-    INNER JOIN tags t ON at2.tag_id = t.id
-    WHERE a.published = 1 AND t.slug = ?
-    ORDER BY a.created_at DESC
-  `).all(tagSlug) as any[]).map(mapRow);
+export async function getArticlesByTag(tagSlug: string): Promise<Article[]> {
+  await ensureInit();
+  await autoPublish();
+  const r = await getClient().execute({
+    sql: `${ARTICLE_SELECT}
+      INNER JOIN article_tags at2 ON a.id = at2.article_id
+      INNER JOIN tags t ON at2.tag_id = t.id
+      WHERE a.published = 1 AND t.slug = ?
+      ORDER BY a.created_at DESC`,
+    args: [tagSlug],
+  });
+  return r.rows as unknown as Article[];
 }
 
-export function getArticlesByAuthorName(name: string): Article[] {
-  autoPublish();
-  return (getDb()
-    .prepare(`${ARTICLE_SELECT} WHERE a.published = 1 AND (au.name = ? OR a.author = ?) ORDER BY a.created_at DESC`)
-    .all(name, name) as any[]).map(mapRow);
+export async function getArticlesByAuthorName(name: string): Promise<Article[]> {
+  await ensureInit();
+  await autoPublish();
+  const r = await getClient().execute({
+    sql: `${ARTICLE_SELECT} WHERE a.published = 1 AND (au.name = ? OR a.author = ?) ORDER BY a.created_at DESC`,
+    args: [name, name],
+  });
+  return r.rows as unknown as Article[];
 }
 
-export function createArticle(data: Omit<Article, 'id' | 'created_at' | 'updated_at' | 'author_bio' | 'author_avatar_url' | 'tags'>): Article {
-  const result = getDb().prepare(`
-    INSERT INTO articles (title, slug, section, author, author_id, summary, content, cover_image_url, published, publish_at)
-    VALUES (@title, @slug, @section, @author, @author_id, @summary, @content, @cover_image_url, @published, @publish_at)
-  `).run(data);
-  return getArticleById(result.lastInsertRowid as number)!;
+export async function createArticle(data: Omit<Article, 'id' | 'created_at' | 'updated_at' | 'author_bio' | 'author_avatar_url' | 'tags'>): Promise<Article> {
+  await ensureInit();
+  const r = await getClient().execute({
+    sql: `INSERT INTO articles (title, slug, section, author, author_id, summary, content, cover_image_url, published, publish_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [data.title, data.slug, data.section, data.author, data.author_id ?? null, data.summary ?? null, data.content, data.cover_image_url ?? null, data.published, data.publish_at ?? null],
+  });
+  return (await getArticleById(Number(r.lastInsertRowid)))!;
 }
 
-export function updateArticle(id: number, data: Record<string, unknown>): Article | undefined {
-  const fields = Object.keys(data).map(k => `${k} = @${k}`).join(', ');
-  getDb().prepare(`UPDATE articles SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE id = @id`).run({ ...data, id });
+export async function updateArticle(id: number, data: Record<string, unknown>): Promise<Article | undefined> {
+  await ensureInit();
+  const fields = Object.keys(data).map(k => `${k} = ?`).join(', ');
+  await getClient().execute({
+    sql: `UPDATE articles SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    args: [...Object.values(data), id],
+  });
   return getArticleById(id);
 }
 
-export function deleteArticle(id: number): void {
-  getDb().prepare('DELETE FROM articles WHERE id = ?').run(id);
+export async function deleteArticle(id: number): Promise<void> {
+  await ensureInit();
+  await getClient().execute({ sql: 'DELETE FROM articles WHERE id = ?', args: [id] });
 }
 
 // ─── Tags ─────────────────────────────────────────────────────────────────────
 
-export function getAllTags(): Tag[] {
-  return getDb().prepare('SELECT * FROM tags ORDER BY name').all() as Tag[];
+export async function getAllTags(): Promise<Tag[]> {
+  await ensureInit();
+  const r = await getClient().execute('SELECT * FROM tags ORDER BY name');
+  return r.rows as unknown as Tag[];
 }
 
-export function getTagBySlug(slug: string): Tag | undefined {
-  return getDb().prepare('SELECT * FROM tags WHERE slug = ?').get(slug) as Tag | undefined;
+export async function getTagBySlug(slug: string): Promise<Tag | undefined> {
+  await ensureInit();
+  const r = await getClient().execute({ sql: 'SELECT * FROM tags WHERE slug = ?', args: [slug] });
+  return r.rows[0] as unknown as Tag | undefined;
 }
 
-export function getOrCreateTag(name: string): Tag {
+export async function getOrCreateTag(name: string): Promise<Tag> {
+  await ensureInit();
   const slug = generateSlug(name);
-  getDb().prepare('INSERT OR IGNORE INTO tags (name, slug) VALUES (?, ?)').run(name.trim(), slug);
-  return getDb().prepare('SELECT * FROM tags WHERE slug = ?').get(slug) as Tag;
+  await getClient().execute({ sql: 'INSERT OR IGNORE INTO tags (name, slug) VALUES (?, ?)', args: [name.trim(), slug] });
+  const r = await getClient().execute({ sql: 'SELECT * FROM tags WHERE slug = ?', args: [slug] });
+  return r.rows[0] as unknown as Tag;
 }
 
-export function deleteTag(id: number): void {
-  getDb().prepare('DELETE FROM tags WHERE id = ?').run(id);
+export async function deleteTag(id: number): Promise<void> {
+  await ensureInit();
+  await getClient().execute({ sql: 'DELETE FROM tags WHERE id = ?', args: [id] });
 }
 
-export function getArticleTags(articleId: number): Tag[] {
-  return getDb().prepare(`
-    SELECT t.* FROM tags t
-    INNER JOIN article_tags at2 ON t.id = at2.tag_id
-    WHERE at2.article_id = ? ORDER BY t.name
-  `).all(articleId) as Tag[];
+export async function getArticleTags(articleId: number): Promise<Tag[]> {
+  await ensureInit();
+  const r = await getClient().execute({
+    sql: `SELECT t.* FROM tags t
+          INNER JOIN article_tags at2 ON t.id = at2.tag_id
+          WHERE at2.article_id = ? ORDER BY t.name`,
+    args: [articleId],
+  });
+  return r.rows as unknown as Tag[];
 }
 
-export function setArticleTags(articleId: number, tagNames: string[]): void {
-  const database = getDb();
-  database.prepare('DELETE FROM article_tags WHERE article_id = ?').run(articleId);
+export async function setArticleTags(articleId: number, tagNames: string[]): Promise<void> {
+  await ensureInit();
+  const client = getClient();
+  await client.execute({ sql: 'DELETE FROM article_tags WHERE article_id = ?', args: [articleId] });
   for (const name of tagNames) {
     if (!name.trim()) continue;
-    const tag = getOrCreateTag(name.trim());
-    database.prepare('INSERT OR IGNORE INTO article_tags (article_id, tag_id) VALUES (?, ?)').run(articleId, tag.id);
+    const tag = await getOrCreateTag(name.trim());
+    await client.execute({ sql: 'INSERT OR IGNORE INTO article_tags (article_id, tag_id) VALUES (?, ?)', args: [articleId, tag.id] });
   }
 }
 
 // ─── Authors ──────────────────────────────────────────────────────────────────
 
-export function getAllAuthors(): Author[] {
-  return getDb().prepare('SELECT * FROM authors ORDER BY name').all() as Author[];
+export async function getAllAuthors(): Promise<Author[]> {
+  await ensureInit();
+  const r = await getClient().execute('SELECT * FROM authors ORDER BY name');
+  return r.rows as unknown as Author[];
 }
 
-export function getAuthorById(id: number): Author | undefined {
-  return getDb().prepare('SELECT * FROM authors WHERE id = ?').get(id) as Author | undefined;
+export async function getAuthorById(id: number): Promise<Author | undefined> {
+  await ensureInit();
+  const r = await getClient().execute({ sql: 'SELECT * FROM authors WHERE id = ?', args: [id] });
+  return r.rows[0] as unknown as Author | undefined;
 }
 
-export function getAuthorByName(name: string): Author | undefined {
-  return getDb().prepare('SELECT * FROM authors WHERE name = ?').get(name) as Author | undefined;
+export async function getAuthorByName(name: string): Promise<Author | undefined> {
+  await ensureInit();
+  const r = await getClient().execute({ sql: 'SELECT * FROM authors WHERE name = ?', args: [name] });
+  return r.rows[0] as unknown as Author | undefined;
 }
 
-export function createAuthor(data: Omit<Author, 'id' | 'created_at'>): Author {
-  const result = getDb().prepare('INSERT INTO authors (name, bio, avatar_url) VALUES (@name, @bio, @avatar_url)').run(data);
-  return getAuthorById(result.lastInsertRowid as number)!;
+export async function createAuthor(data: Omit<Author, 'id' | 'created_at'>): Promise<Author> {
+  await ensureInit();
+  const r = await getClient().execute({
+    sql: 'INSERT INTO authors (name, bio, avatar_url) VALUES (?, ?, ?)',
+    args: [data.name, data.bio ?? null, data.avatar_url ?? null],
+  });
+  return (await getAuthorById(Number(r.lastInsertRowid)))!;
 }
 
-export function updateAuthor(id: number, data: Partial<Omit<Author, 'id' | 'created_at'>>): Author | undefined {
-  const fields = Object.keys(data).map(k => `${k} = @${k}`).join(', ');
-  getDb().prepare(`UPDATE authors SET ${fields} WHERE id = @id`).run({ ...data, id });
+export async function updateAuthor(id: number, data: Partial<Omit<Author, 'id' | 'created_at'>>): Promise<Author | undefined> {
+  await ensureInit();
+  const fields = Object.keys(data).map(k => `${k} = ?`).join(', ');
+  await getClient().execute({
+    sql: `UPDATE authors SET ${fields} WHERE id = ?`,
+    args: [...Object.values(data), id],
+  });
   return getAuthorById(id);
 }
 
-export function deleteAuthor(id: number): void {
-  getDb().prepare('DELETE FROM authors WHERE id = ?').run(id);
+export async function deleteAuthor(id: number): Promise<void> {
+  await ensureInit();
+  await getClient().execute({ sql: 'DELETE FROM authors WHERE id = ?', args: [id] });
 }
 
 // ─── Subscribers ──────────────────────────────────────────────────────────────
 
-export function addSubscriber(email: string): void {
-  getDb().prepare('INSERT INTO subscribers (email) VALUES (?)').run(email);
+export async function addSubscriber(email: string): Promise<void> {
+  await ensureInit();
+  await getClient().execute({ sql: 'INSERT INTO subscribers (email) VALUES (?)', args: [email] });
 }
 
 // ─── Utils ────────────────────────────────────────────────────────────────────

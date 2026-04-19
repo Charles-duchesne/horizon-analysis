@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   description: 'Latest equities analysis and market insights from Horizon Analysis.',
 };
 
-export default function EquitiesPage() {
-  const articles = getPublishedArticles('equities');
+export default async function EquitiesPage() {
+  const articles = await getPublishedArticles('equities');
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header />

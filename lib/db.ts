@@ -225,7 +225,7 @@ export async function updateArticle(id: number, data: Record<string, unknown>): 
   const fields = Object.keys(data).map(k => `${k} = ?`).join(', ');
   await getClient().execute({
     sql: `UPDATE articles SET ${fields}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    args: [...Object.values(data), id],
+    args: [...Object.values(data) as any[], id],
   });
   return getArticleById(id);
 }
@@ -318,7 +318,7 @@ export async function updateAuthor(id: number, data: Partial<Omit<Author, 'id' |
   const fields = Object.keys(data).map(k => `${k} = ?`).join(', ');
   await getClient().execute({
     sql: `UPDATE authors SET ${fields} WHERE id = ?`,
-    args: [...Object.values(data), id],
+    args: [...Object.values(data) as any[], id],
   });
   return getAuthorById(id);
 }

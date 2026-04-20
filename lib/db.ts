@@ -335,6 +335,12 @@ export async function addSubscriber(email: string): Promise<void> {
   await getClient().execute({ sql: 'INSERT INTO subscribers (email) VALUES (?)', args: [email] });
 }
 
+export async function getAllSubscribers(): Promise<{ email: string }[]> {
+  await ensureInit();
+  const r = await getClient().execute('SELECT email FROM subscribers');
+  return r.rows as unknown as { email: string }[];
+}
+
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
 export function generateSlug(title: string): string {

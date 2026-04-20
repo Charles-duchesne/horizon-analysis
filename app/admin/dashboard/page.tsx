@@ -17,6 +17,8 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [notifying, setNotifying] = useState<number | null>(null);
+  const [notifyMsg, setNotifyMsg] = useState<string>('');
 
   useEffect(() => {
     if (localStorage.getItem('horizon_admin') !== 'true') {
@@ -34,6 +36,20 @@ export default function AdminDashboard() {
     setLoading(false);
   }, []);
 
+  async function handleNotify(articleId: number) {
+    setNotifying(articleId);
+    setNotifyMsg('');
+    const res = await fetch('/api/notify-subscribers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ articleId }),
+    });
+    const data = await res.json();
+    setNotifyMsg(res.ok ? `✓ Sent to ${data.sent} subscriber${data.sent !== 1 ? 's' : ''}` : `Error: ${data.error}`);
+    setNotifying(null);
+    setTimeout(() => setNotifyMsg(''), 4000);
+  }
+
   async function handleDelete() {
     if (deleteId === null) return;
     setDeleting(true);
@@ -47,6 +63,9 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-gray-50">
       <AdminNav />
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {notifyMsg && (
+          <div className="mb-4 px-4 py-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">{notifyMsg}</div>
+        )}
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-900">All Articles</h1>
           <Link
@@ -106,6 +125,15 @@ export default function AdminDashboard() {
                         >
                           Edit
                         </Link>
+                        {article.published === 1 && (
+                          <button
+                            onClick={() => handleNotify(article.id)}
+                            disabled={notifying === article.id}
+                            className="text-green-600 hover:text-green-800 text-xs font-medium disabled:opacity-50"
+                          >
+                            {notifying === article.id ? 'Sending...' : 'Notify'}
+                          </button>
+                        )}
                         <button
                           onClick={() => setDeleteId(article.id)}
                           className="text-red-500 hover:text-red-700 text-xs font-medium"

@@ -23,9 +23,9 @@ export async function POST(req: NextRequest) {
 
     const emails = subscribers.map(s => s.email);
 
-    await resend.emails.send({
+    const { data, error } = await resend.emails.send({
       from: 'Horizon Analysis <onboarding@resend.dev>',
-      to: emails,
+      to: emails.slice(0, 1), // Resend test sender only works for 1 email at a time to your own account
       subject: article.title,
       html: `
         <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
@@ -45,6 +45,12 @@ export async function POST(req: NextRequest) {
       `,
     });
 
+    if (error) {
+      console.error('Resend error:', JSON.stringify(error));
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    console.log('Resend success:', JSON.stringify(data));
     return NextResponse.json({ sent: emails.length });
   } catch (err: any) {
     console.error('Notify error:', err);

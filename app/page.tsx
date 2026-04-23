@@ -25,7 +25,7 @@ function HeroArticle({ article }: { article: Article }) {
           className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:opacity-50 transition-opacity duration-300" />
       )}
       <div className="relative z-10 p-6 sm:p-10 bg-gradient-to-t from-[#0f1e35]/95 via-[#0f1e35]/60 to-transparent">
-        <SectionBadge section={article.section} />
+        <span className="inline-block text-xs font-semibold uppercase tracking-wider text-gray-300">{article.section}</span>
         <h1 className="mt-3 text-2xl sm:text-4xl font-bold leading-tight group-hover:text-blue-200 transition-colors">
           {article.title}
         </h1>

@@ -1,17 +1,15 @@
 import { NextResponse } from 'next/server';
 
-const SYMBOLS = ['SPY', 'QQQ', 'DIA', 'GLD', 'BTCUSD', 'ETHUSD'];
+const SYMBOLS = [
+  { symbol: 'SPY',    label: 'S&P 500'   },
+  { symbol: 'BTCUSD', label: 'Bitcoin'   },
+  { symbol: 'ETHUSD', label: 'Ethereum'  },
+  { symbol: 'EURUSD', label: 'EUR / USD' },
+  { symbol: 'NVDA',   label: 'Nvidia'    },
+  { symbol: 'AAPL',   label: 'Apple'     },
+  { symbol: 'MSFT',   label: 'Microsoft' },
+];
 
-const LABELS: Record<string, string> = {
-  SPY:    'S&P 500',
-  QQQ:    'NASDAQ',
-  DIA:    'Dow Jones',
-  GLD:    'Gold',
-  BTCUSD: 'Bitcoin',
-  ETHUSD: 'Ethereum',
-};
-
-// Cache for 5 minutes
 let cache: { data: unknown; ts: number } | null = null;
 
 export async function GET() {
@@ -21,20 +19,27 @@ export async function GET() {
 
   try {
     const key = process.env.FMP_API_KEY;
-    const url = `https://financialmodelingprep.com/api/v3/quote/${SYMBOLS.join(',')}?apikey=${key}`;
-    const res = await fetch(url, { next: { revalidate: 300 } });
-    const json = await res.json();
+    const results = await Promise.all(
+      SYMBOLS.map(({ symbol, label }) =>
+        fetch(`https://financialmodelingprep.com/stable/quote?symbol=${symbol}&apikey=${key}`, { next: { revalidate: 300 } })
+          .then(r => r.json())
+          .then((json: any[]) => {
+            if (!Array.isArray(json) || !json[0]?.price) return null;
+            const q = json[0];
+            const pct = q.changePercentage ?? 0;
+            return {
+              label,
+              val: formatVal(symbol, q.price),
+              chg: `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`,
+              up: pct >= 0,
+            };
+          })
+          .catch(() => null)
+      )
+    );
 
-    if (!Array.isArray(json)) throw new Error('Invalid response');
-
-    const data = json.map((q: any) => ({
-      label: LABELS[q.symbol] ?? q.symbol,
-      val:   formatVal(q.symbol, q.price),
-      chg:   `${q.changesPercentage >= 0 ? '+' : ''}${q.changesPercentage.toFixed(2)}%`,
-      up:    q.changesPercentage >= 0,
-    }));
-
-    cache = { data, ts: Date.now() };
+    const data = results.filter(Boolean);
+    if (data.length) cache = { data, ts: Date.now() };
     return NextResponse.json(data);
   } catch {
     return NextResponse.json([], { status: 500 });
@@ -42,8 +47,7 @@ export async function GET() {
 }
 
 function formatVal(symbol: string, price: number): string {
-  if (symbol === 'BTCUSD' || symbol === 'ETHUSD') {
-    return `$${Math.round(price).toLocaleString()}`;
-  }
+  if (symbol === 'BTCUSD' || symbol === 'ETHUSD') return `$${Math.round(price).toLocaleString()}`;
+  if (symbol === 'EURUSD') return price.toFixed(4);
   return `$${price.toFixed(2)}`;
 }

@@ -1,14 +1,14 @@
 const sectionStyles: Record<string, string> = {
-  economy: 'text-blue-700',
-  politics: 'text-red-700',
-  equities: 'text-green-700',
-  others: 'text-gray-500',
+  economy:  'text-[#2b6fdb]',
+  politics: 'text-[#b94a4a]',
+  equities: 'text-[#1f8a5a]',
+  others:   'text-[#7b5abf]',
 };
 
 export default function SectionBadge({ section }: { section: string }) {
   const styles = sectionStyles[section] ?? sectionStyles.others;
   return (
-    <span className={`inline-block text-xs font-semibold uppercase tracking-wider ${styles}`}>
+    <span className={`inline-block text-[10.5px] font-bold uppercase tracking-[0.18em] ${styles}`}>
       {section}
     </span>
   );

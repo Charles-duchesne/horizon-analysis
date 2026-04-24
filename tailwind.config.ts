@@ -9,7 +9,18 @@ const config: Config = {
     './app/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
-    extend: {},
+    extend: {
+      fontFamily: {
+        sans:      ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        serif:     ['var(--font-serif)', 'Georgia', 'serif'],
+        'serif-2': ['var(--font-serif-2)', 'Georgia', 'serif'],
+      },
+      colors: {
+        navy: { 900: '#0f2341', 800: '#173258', 700: '#1f406e' },
+        gold: '#b3894c',
+        ink:  '#0c1626',
+      },
+    },
   },
   plugins: [typography],
 };

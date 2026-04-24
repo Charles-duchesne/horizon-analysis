@@ -4,13 +4,39 @@
 
 @layer base {
   *, *::before, *::after { box-sizing: border-box; }
+
+  :root {
+    --navy-900: #0f2341;
+    --navy-800: #173258;
+    --navy-700: #1f406e;
+    --gold:     #b3894c;
+    --gold-dim: #8a6a3a;
+    --ink:      #0c1626;
+    --ink-2:    #2a3648;
+    --mute:     #6a7990;
+    --rule:     rgba(15, 35, 65, 0.1);
+    --rule-2:   rgba(15, 35, 65, 0.18);
+    --c-economy:  #2b6fdb;
+    --c-politics: #b94a4a;
+    --c-equities: #1f8a5a;
+    --c-others:   #7b5abf;
+  }
 }
 
 @layer utilities {
+  .font-serif   { font-family: var(--font-serif, "Georgia"), serif; }
+  .font-serif-2 { font-family: var(--font-serif-2, "Georgia"), serif; }
+
   .line-clamp-2 {
     overflow: hidden;
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
+  }
+  .line-clamp-3 {
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
   }
 }

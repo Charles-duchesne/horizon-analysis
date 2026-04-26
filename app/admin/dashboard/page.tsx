@@ -19,6 +19,9 @@ export default function AdminDashboard() {
   const [deleting, setDeleting] = useState(false);
   const [notifying, setNotifying] = useState<number | null>(null);
   const [notifyMsg, setNotifyMsg] = useState<string>('');
+  const [section, setSection] = useState<string>('all');
+  const [status, setStatus] = useState<string>('all');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     if (localStorage.getItem('horizon_admin') !== 'true') {
@@ -76,6 +79,52 @@ export default function AdminDashboard() {
           </Link>
         </div>
 
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-3 mb-5">
+          {/* Search */}
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search articles..."
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
+          />
+
+          {/* Section filters */}
+          <div className="flex items-center gap-1.5">
+            {['all', 'economy', 'politics', 'equities', 'others'].map(s => (
+              <button
+                key={s}
+                onClick={() => setSection(s)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize transition-colors ${
+                  section === s
+                    ? 'bg-[#0f1e35] text-white'
+                    : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {s === 'all' ? 'All Sections' : s}
+              </button>
+            ))}
+          </div>
+
+          {/* Status filter */}
+          <div className="flex items-center gap-1.5 ml-auto">
+            {[['all', 'All'], ['published', 'Published'], ['draft', 'Drafts']].map(([val, label]) => (
+              <button
+                key={val}
+                onClick={() => setStatus(val)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  status === val
+                    ? 'bg-[#0f1e35] text-white'
+                    : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {loading ? (
           <div className="text-gray-500 text-sm">Loading...</div>
         ) : articles.length === 0 ? (
@@ -99,7 +148,13 @@ export default function AdminDashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {articles.map(article => (
+                {articles.filter(a => {
+                  if (section !== 'all' && a.section !== section) return false;
+                  if (status === 'published' && !a.published) return false;
+                  if (status === 'draft' && a.published) return false;
+                  if (search && !a.title.toLowerCase().includes(search.toLowerCase())) return false;
+                  return true;
+                }).map(article => (
                   <tr key={article.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 font-medium text-gray-900 max-w-xs truncate">{article.title}</td>
                     <td className="px-4 py-3 hidden sm:table-cell">
@@ -144,6 +199,19 @@ export default function AdminDashboard() {
                     </td>
                   </tr>
                 ))}
+                {articles.filter(a => {
+                  if (section !== 'all' && a.section !== section) return false;
+                  if (status === 'published' && !a.published) return false;
+                  if (status === 'draft' && a.published) return false;
+                  if (search && !a.title.toLowerCase().includes(search.toLowerCase())) return false;
+                  return true;
+                }).length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-gray-400">
+                      No articles match your filters.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

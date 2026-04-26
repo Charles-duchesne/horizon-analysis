@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { Article, Author, Tag } from '@/lib/db';
 
-const MDEditor = dynamic(() => import('@uiw/react-md-editor'), { ssr: false });
+const RichTextEditor = dynamic(() => import('@/components/RichTextEditor'), { ssr: false });
 
 function slugify(title: string) {
   return title.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
@@ -105,7 +105,7 @@ export default function ArticleForm({ article, mode }: Props) {
   const inputCls = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900';
 
   return (
-    <div className="space-y-6" data-color-mode="light">
+    <div className="space-y-6">
       {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{error}</div>}
 
       {/* Title */}
@@ -187,9 +187,7 @@ export default function ArticleForm({ article, mode }: Props) {
       {/* Content */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Content <span className="text-red-500">*</span></label>
-        <div className="border border-gray-300 rounded-lg overflow-hidden">
-          <MDEditor value={form.content} onChange={val => update('content', val ?? '')} height={400} preview="edit" />
-        </div>
+        <RichTextEditor value={form.content} onChange={val => update('content', val)} />
       </div>
 
       {/* Status + Schedule */}
